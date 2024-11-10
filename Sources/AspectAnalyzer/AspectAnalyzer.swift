@@ -23,7 +23,6 @@ import Logging
 /// - Important: This actor is safe for concurrent use.
 public actor AspectAnalyzer {
     private let ollamaKit: OllamaKit
-    private let model: String
     private let logger: Logger?
     
     /// Represents a single aspect of a query with its characteristics and importance.
@@ -99,6 +98,8 @@ public actor AspectAnalyzer {
             aspects.filter { $0.importance > 0.7 }
         }
     }
+    
+    public let model: String
     
     /// Creates a new AspectAnalyzer instance.
     ///
