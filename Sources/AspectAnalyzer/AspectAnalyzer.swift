@@ -131,16 +131,16 @@ public struct AspectAnalyzer: Sendable {
     ///
     /// - Parameters:
     ///   - query: The query string to analyze
-    ///   - config: Configuration for complexity calculation (default: .default)
+    ///   - configuration: Configuration for complexity calculation (default: .default)
     /// - Returns: Analysis results containing aspects and evaluations
     /// - Throws: AnalysisError if the analysis fails
-    public func analyzeQuery(_ query: String, config: ComplexityConfig = .default) async throws -> Analysis {
+    public func analyzeQuery(_ query: String, configuration: ComplexityConfiguration = .default) async throws -> Analysis {
         logger?.debug("Starting query analysis", metadata: [
             "query": .string(query)
         ])
         
         let aspects = try await extractAspects(from: query)
-        let complexity = calculateComplexity(query: query, aspects: aspects, config: config)
+        let complexity = calculateComplexity(query: query, aspects: aspects, configuration: configuration)
         let focusAreas = determinePrimaryFocus(aspects: aspects)
         
         logger?.info("Completed query analysis", metadata: [
@@ -280,7 +280,7 @@ extension AspectAnalyzer {
 }
 
 /// Configuration for complexity calculation weights and thresholds
-public struct ComplexityConfig: Sendable {
+public struct ComplexityConfiguration: Sendable {
     /// Weights for different complexity factors (must sum to 1.0)
     public struct Weights: Sendable {
         /// Weight for aspect count factor (default: 0.3)
@@ -347,7 +347,7 @@ public struct ComplexityConfig: Sendable {
         self.thresholds = thresholds ?? Thresholds()
     }
     
-    public static var `default`: ComplexityConfig {
+    public static var `default`: ComplexityConfiguration {
         try! .init()
     }
 }
@@ -362,10 +362,10 @@ extension AspectAnalyzer {
     public func calculateComplexity(
         query: String,
         aspects: [Aspect],
-        config: ComplexityConfig = .default
+        configuration: ComplexityConfiguration = .default
     ) -> Float {
         // 1. Aspect count factor
-        let aspectCountFactor = Float(aspects.count) / Float(config.thresholds.maxAspects)
+        let aspectCountFactor = Float(aspects.count) / Float(configuration.thresholds.maxAspects)
         let normalizedAspectCount = min(aspectCountFactor, 1.0)
         
         // 2. Average importance factor
@@ -374,20 +374,20 @@ extension AspectAnalyzer {
         
         // 3. Knowledge breadth factor
         let uniqueKnowledge = Set(aspects.flatMap(\.requiredKnowledge))
-        let knowledgeFactor = Float(uniqueKnowledge.count) / Float(config.thresholds.maxKnowledge)
+        let knowledgeFactor = Float(uniqueKnowledge.count) / Float(configuration.thresholds.maxKnowledge)
         let normalizedKnowledge = min(knowledgeFactor, 1.0)
         
         // 4. Information type diversity factor
         let uniqueInfoTypes = Set(aspects.flatMap(\.expectedInfoTypes))
-        let infoTypeFactor = Float(uniqueInfoTypes.count) / Float(config.thresholds.maxInfoTypes)
+        let infoTypeFactor = Float(uniqueInfoTypes.count) / Float(configuration.thresholds.maxInfoTypes)
         let normalizedInfoTypes = min(infoTypeFactor, 1.0)
         
         // Calculate weighted complexity
         let complexity =
-        config.weights.aspectCount * normalizedAspectCount +
-        config.weights.importance * avgImportance +
-        config.weights.knowledge * normalizedKnowledge +
-        config.weights.infoType * normalizedInfoTypes
+        configuration.weights.aspectCount * normalizedAspectCount +
+        configuration.weights.importance * avgImportance +
+        configuration.weights.knowledge * normalizedKnowledge +
+        configuration.weights.infoType * normalizedInfoTypes
         
         return min(max(complexity, 0.0), 1.0)
     }
@@ -424,7 +424,7 @@ extension AspectAnalyzer {
     public func analyzeComplexity(
         query: String,
         aspects: [Aspect],
-        config: ComplexityConfig
+        config: ComplexityConfiguration
     ) -> ComplexityAnalysis {
         // Calculate raw factors
         let aspectCount = aspects.count
