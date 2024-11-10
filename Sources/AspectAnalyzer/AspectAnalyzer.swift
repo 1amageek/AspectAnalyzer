@@ -97,6 +97,18 @@ public actor AspectAnalyzer {
         public var criticalAspects: [Aspect] {
             aspects.filter { $0.importance > 0.7 }
         }
+        
+        public init(
+            query: String,
+            aspects: [Aspect],
+            primaryFocus: Set<String>,
+            complexityScore: Float
+        ) {
+            self.query = query
+            self.aspects = aspects
+            self.primaryFocus = primaryFocus
+            self.complexityScore = complexityScore
+        }
     }
     
     public let model: String
