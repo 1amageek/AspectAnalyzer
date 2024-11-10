@@ -21,7 +21,7 @@ import Logging
 /// ```
 ///
 /// - Important: This actor is safe for concurrent use.
-public actor AspectAnalyzer {
+public struct AspectAnalyzer: Sendable {
     private let ollamaKit: OllamaKit
     private let logger: Logger?
     
