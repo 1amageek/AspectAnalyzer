@@ -1,0 +1,24 @@
+{
+  "originHash" : "ca854a88c62a11d0b549b586e8beafc17cb141e6c64448e79532cdd8528c7022",
+  "pins" : [
+    {
+      "identity" : "ollamakit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/1amageek/OllamaKit.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "71d8e7ddb54e53b2722032c3930496201440866a"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "1efe6f812904b34ed76ba28fd1f3e9f3bc94f8ec"
+      }
+    }
+  ],
+  "version" : 3
+}
