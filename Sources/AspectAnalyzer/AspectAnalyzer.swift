@@ -111,15 +111,34 @@ public struct AspectAnalyzer: Sendable {
         }
         
         public var description: String {
+            let focusAreas = primaryFocus.sorted().joined(separator: ", ")
+            return """
+        Analysis Results:
+          Query: "\(query)"
+          Complexity Score: \(String(format: "%.2f", complexityScore))
+          Primary Focus Areas: [\(focusAreas)]
+        \(formatAspectList(aspects, header: "All Aspects"))
+        \(formatAspectList(criticalAspects, header: "Critical Aspects"))
         """
-        Analysis {
-          query: "\(query)"
-          aspects: \(aspects)
-          primaryFocus: \(primaryFocus)
-          complexityScore: \(complexityScore)
-          prioritizedAspects: \(prioritizedAspects)
-          criticalAspects: \(criticalAspects)
         }
+        
+        private func formatAspect(_ aspect: Aspect, indent: String = "  ") -> String {
+            let knowledge = aspect.requiredKnowledge.sorted().joined(separator: ", ")
+            let infoTypes = aspect.expectedInfoTypes.sorted().joined(separator: ", ")
+            
+            return """
+        \(indent)- Description: \(aspect.description)
+        \(indent)  Importance: \(String(format: "%.2f", aspect.importance))
+        \(indent)  Required Knowledge: [\(knowledge)]
+        \(indent)  Expected Info Types: [\(infoTypes)]
+        """
+        }
+        
+        private func formatAspectList(_ aspects: [Aspect], header: String, indent: String = "  ") -> String {
+            guard !aspects.isEmpty else { return "\(indent)\(header): None" }
+            return """
+        \(indent)\(header):
+        \(aspects.map { formatAspect($0, indent: indent + "  ") }.joined(separator: "\n"))
         """
         }
     }
