@@ -100,8 +100,7 @@ func simpleKeywordExample() async throws {
     let queries = [
         "What are the key benefits of using microservices architecture?",
         "How does climate change affect biodiversity in rainforests?",
-        "Explain the basics of neural networks in machine learning.",
-        "iPhone 16の画面サイズは？"
+        "Explain the basics of neural networks in machine learning."
     ]
     
     print("Quick Keyword Analysis Examples")
