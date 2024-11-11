@@ -70,7 +70,7 @@ public struct AspectAnalyzer: Sendable {
     ///     print("- \(aspect.description): \(aspect.importance)")
     /// }
     /// ```
-    public struct Analysis: Sendable {
+    public struct Analysis: Sendable, CustomStringConvertible {
         /// The original query text that was analyzed
         public let query: String
         
@@ -108,6 +108,19 @@ public struct AspectAnalyzer: Sendable {
             self.aspects = aspects
             self.primaryFocus = primaryFocus
             self.complexityScore = complexityScore
+        }
+        
+        public var description: String {
+        """
+        Analysis {
+          query: "\(query)"
+          aspects: \(aspects)
+          primaryFocus: \(primaryFocus)
+          complexityScore: \(complexityScore)
+          prioritizedAspects: \(prioritizedAspects)
+          criticalAspects: \(criticalAspects)
+        }
+        """
         }
     }
     
