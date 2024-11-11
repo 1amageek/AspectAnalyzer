@@ -91,6 +91,29 @@ func example() async throws {
     }
 }
 
+@Test
+func simpleKeywordExample() async throws {
+    let analyzer = AspectAnalyzer(
+        logger: Logger(label: "QueryAnalyzer")
+    )
+    
+    let queries = [
+        "What are the key benefits of using microservices architecture?",
+        "How does climate change affect biodiversity in rainforests?",
+        "Explain the basics of neural networks in machine learning.",
+        "iPhone 16の画面サイズは？"
+    ]
+    
+    print("Quick Keyword Analysis Examples")
+    print("==============================")
+    
+    for query in queries {
+        let analysis = try await analyzer.extractKeywords(query)
+        print("\nQuery:", analysis.query)
+        print("Keywords:", analysis.keywords.joined(separator: ", "))
+    }
+}
+
 @Test("Analyzes quantum computing cryptography query correctly")
 func testQuantumCryptographyQuery() async throws {
     let analyzer = AspectAnalyzer(

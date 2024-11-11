@@ -673,3 +673,90 @@ extension AspectAnalyzer {
         )
     }
 }
+
+extension AspectAnalyzer {
+    /// A lightweight analysis result containing only prioritized keywords.
+    public struct KeywordAnalysis: Sendable {
+        /// The original query text
+        public let query: String
+        
+        /// Keywords sorted by importance
+        public let keywords: [String]
+        
+        public var description: String {
+            """
+            Query: "\(query)"
+            Keywords: \(keywords.joined(separator: ", "))
+            """
+        }
+    }
+    
+    /// Performs a lightweight analysis of the query to extract key terms.
+    ///
+    /// This method provides a faster alternative to full aspect analysis when only
+    /// keywords are needed. It uses the same LLM but with a simplified prompt
+    /// focused only on keyword extraction.
+    ///
+    /// - Parameter query: The query string to analyze
+    /// - Returns: Analysis results containing prioritized keywords
+    /// - Throws: AnalysisError if the analysis fails
+    public func extractKeywords(_ query: String) async throws -> KeywordAnalysis {
+        let prompt = """
+        Extract the most important keywords from the following query, ordered by importance.
+        Return only a JSON array of strings.
+        
+        Query: \(query)
+        """
+        
+        let data = OKChatRequestData(
+            model: model,
+            messages: [
+                OKChatRequestData.Message(
+                    role: .system,
+                    content: "You are a keyword extraction expert. Extract and prioritize key terms from queries. Respond with JSON arrays only."
+                ),
+                OKChatRequestData.Message(role: .user, content: prompt)
+            ]
+        ) { options in
+            options.temperature = 0 // Deterministic output
+            options.topP = 1
+            options.topK = 1
+        }
+        
+        // Collect response
+        var response = ""
+        for try await chunk in ollamaKit.chat(data: data) {
+            response += chunk.message?.content ?? ""
+        }
+        
+        // Clean up response to ensure valid JSON array
+        let jsonResponse = cleanJsonArrayResponse(response)
+        
+        // Parse response
+        guard let jsonData = jsonResponse.data(using: .utf8) else {
+            throw AnalysisError.invalidResponse
+        }
+        
+        do {
+            let keywords = try JSONDecoder().decode([String].self, from: jsonData)
+            return KeywordAnalysis(query: query, keywords: keywords)
+        } catch {
+            logger?.error("Failed to decode keywords", metadata: [
+                "error": .string(error.localizedDescription),
+                "response": .string(response)
+            ])
+            throw AnalysisError.decodingFailed(error)
+        }
+    }
+    
+    /// Cleans JSON array response string to ensure validity
+    private func cleanJsonArrayResponse(_ response: String) -> String {
+        // Extract JSON content between first [ and last ]
+        if let start = response.firstIndex(of: "["),
+           let end = response.lastIndex(of: "]") {
+            let jsonContent = response[start...end]
+            return String(jsonContent)
+        }
+        return response
+    }
+}
