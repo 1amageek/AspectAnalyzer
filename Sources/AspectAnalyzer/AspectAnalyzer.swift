@@ -25,10 +25,11 @@ public struct AspectAnalyzer: Sendable {
     private let ollamaKit: OllamaKit
     private let logger: Logger?
     
-    /// Represents a single aspect of a query with its characteristics and importance.
+    /// Represents a single aspect of a query with its characteristics, importance, and keywords.
     ///
     /// Each aspect captures a specific facet of the query, including its importance level,
-    /// the knowledge areas required to understand it, and the types of information expected.
+    /// the knowledge areas required to understand it, the types of information expected,
+    /// and key terms or phrases that are central to this aspect.
     ///
     /// Example:
     /// ```swift
@@ -36,7 +37,11 @@ public struct AspectAnalyzer: Sendable {
     ///     description: "Quantum computing fundamentals",
     ///     importance: 0.8,
     ///     requiredKnowledge: ["quantum_computing", "physics"],
-    ///     expectedInfoTypes: ["technical", "theoretical"]
+    ///     expectedInfoTypes: ["technical", "theoretical"],
+    ///     keywords: [
+    ///         Keyword(term: "quantum", weight: 0.9, category: "core_concept"),
+    ///         Keyword(term: "superposition", weight: 0.7, category: "principle")
+    ///     ]
     /// )
     /// ```
     public struct Aspect: Codable, Equatable, Hashable, Sendable {
@@ -55,6 +60,68 @@ public struct AspectAnalyzer: Sendable {
         ///
         /// Examples: "technical", "theoretical", "practical", etc.
         public let expectedInfoTypes: Set<String>
+        
+        /// Keywords associated with this aspect
+        ///
+        /// Each keyword represents a significant term or phrase related to this aspect,
+        /// along with its weight and semantic category.
+        public let keywords: [Keyword]
+        
+        /// Represents a significant term or phrase within an aspect
+        public struct Keyword: Codable, Equatable, Hashable, Sendable {
+            /// The actual term or phrase
+            public let term: String
+            
+            /// The importance weight of this keyword (0.0 to 1.0)
+            public let weight: Float
+            
+            /// Semantic category of the keyword (e.g., "core_concept", "principle", "methodology")
+            public let category: String
+            
+            /// Optional context or clarification about the keyword's usage
+            public let context: String?
+            
+            public init(
+                term: String,
+                weight: Float,
+                category: String,
+                context: String? = nil
+            ) {
+                self.term = term
+                self.weight = weight
+                self.category = category
+                self.context = context
+            }
+        }
+        
+        /// Returns keywords sorted by weight in descending order
+        public var prioritizedKeywords: [Keyword] {
+            keywords.sorted { $0.weight > $1.weight }
+        }
+        
+        /// Returns keywords that are considered critical (weight > 0.7)
+        public var criticalKeywords: [Keyword] {
+            keywords.filter { $0.weight > 0.7 }
+        }
+        
+        /// Returns keywords grouped by their semantic categories
+        public var keywordsByCategory: [String: [Keyword]] {
+            Dictionary(grouping: keywords) { $0.category }
+        }
+        
+        public init(
+            description: String,
+            importance: Float,
+            requiredKnowledge: Set<String>,
+            expectedInfoTypes: Set<String>,
+            keywords: [Keyword] = []
+        ) {
+            self.description = description
+            self.importance = importance
+            self.requiredKnowledge = requiredKnowledge
+            self.expectedInfoTypes = expectedInfoTypes
+            self.keywords = keywords
+        }
     }
     
     /// Results of query analysis containing aspects, complexity, and focus areas.
@@ -74,28 +141,86 @@ public struct AspectAnalyzer: Sendable {
         /// The original query text that was analyzed
         public let query: String
         
-        /// Array of extracted aspects with their evaluations
+        /// Array of extracted aspects with their evaluations, keywords, and semantic analysis
         public let aspects: [Aspect]
         
-        /// Primary focus areas identified from the analysis
+        /// Primary focus areas identified from the analysis, representing key domains of knowledge
         public let primaryFocus: Set<String>
         
         /// Overall complexity score of the query (0.0 to 1.0)
+        /// This score considers aspect count, importance, knowledge breadth, and semantic richness
         public let complexityScore: Float
         
-        /// Returns aspects sorted by importance in descending order
+        /// Returns aspects sorted by importance in descending order, with their associated keywords
+        /// and semantic categorizations
         ///
-        /// The most important aspects appear first in the resulting array.
+        /// The most important aspects appear first in the resulting array, providing a prioritized
+        /// view of the query's components and their semantic relationships.
+        ///
+        /// Example:
+        /// ```swift
+        /// let analysis = try await analyzer.analyzeQuery(query)
+        /// for aspect in analysis.prioritizedAspects {
+        ///     print("Aspect: \(aspect.description)")
+        ///     print("Keywords: \(aspect.criticalKeywords.map(\.term).joined(separator: ", "))")
+        /// }
+        /// ```
         public var prioritizedAspects: [Aspect] {
             aspects.sorted { $0.importance > $1.importance }
         }
         
-        /// Returns aspects with importance greater than 0.7
+        /// Returns aspects with importance greater than 0.7, including their critical keywords
+        /// and semantic relationships
         ///
-        /// These represent the most critical aspects of the query that require
-        /// particular attention.
+        /// These represent the most critical aspects of the query that require particular attention,
+        /// along with their associated key terms and conceptual relationships.
+        ///
+        /// Example:
+        /// ```swift
+        /// let analysis = try await analyzer.analyzeQuery(query)
+        /// for aspect in analysis.criticalAspects {
+        ///     print("Critical Aspect: \(aspect.description)")
+        ///     for keyword in aspect.criticalKeywords {
+        ///         print("  Key Term: \(keyword.term) (\(keyword.category))")
+        ///     }
+        /// }
+        /// ```
         public var criticalAspects: [Aspect] {
             aspects.filter { $0.importance > 0.7 }
+        }
+        
+        /// Returns a summary of keyword categories and their significance across all aspects
+        ///
+        /// Provides aggregated statistics about keyword usage, categories, and semantic relationships
+        /// throughout the analysis.
+        public var keywordSummary: KeywordSummary {
+            let allKeywords = aspects.flatMap(\.keywords)
+            let categories = Dictionary(grouping: allKeywords) { $0.category }
+            
+            return KeywordSummary(
+                totalKeywords: allKeywords.count,
+                categories: categories.mapValues { keywords in
+                    KeywordSummary.CategoryStats(
+                        count: keywords.count,
+                        averageWeight: keywords.map(\.weight).reduce(0, +) / Float(keywords.count),
+                        topTerms: keywords.sorted { $0.weight > $1.weight }
+                            .prefix(3)
+                            .map(\.term)
+                    )
+                }
+            )
+        }
+        
+        /// A structure containing aggregated keyword statistics
+        public struct KeywordSummary: Sendable {
+            public let totalKeywords: Int
+            public let categories: [String: CategoryStats]
+            
+            public struct CategoryStats: Sendable {
+                public let count: Int
+                public let averageWeight: Float
+                public let topTerms: [String]
+            }
         }
         
         public init(
@@ -112,26 +237,63 @@ public struct AspectAnalyzer: Sendable {
         
         public var description: String {
             let focusAreas = primaryFocus.sorted().joined(separator: ", ")
+            let summary = keywordSummary
+            
             return """
         Analysis Results:
           Query: "\(query)"
           Complexity Score: \(String(format: "%.2f", complexityScore))
           Primary Focus Areas: [\(focusAreas)]
+          
+          Keyword Analysis:
+            Total Keywords: \(summary.totalKeywords)
+            Categories: \(formatKeywordCategories(summary.categories))
+            
         \(formatAspectList(aspects, header: "All Aspects"))
         \(formatAspectList(criticalAspects, header: "Critical Aspects"))
         """
+        }
+        
+        private func formatKeywordCategories(_ categories: [String: KeywordSummary.CategoryStats]) -> String {
+            categories.map { category, stats in
+            """
+            
+              \(category):
+                Count: \(stats.count)
+                Avg Weight: \(String(format: "%.2f", stats.averageWeight))
+                Top Terms: \(stats.topTerms.joined(separator: ", "))
+            """
+            }.joined()
         }
         
         private func formatAspect(_ aspect: Aspect, indent: String = "  ") -> String {
             let knowledge = aspect.requiredKnowledge.sorted().joined(separator: ", ")
             let infoTypes = aspect.expectedInfoTypes.sorted().joined(separator: ", ")
             
-            return """
+            var result = """
         \(indent)- Description: \(aspect.description)
         \(indent)  Importance: \(String(format: "%.2f", aspect.importance))
         \(indent)  Required Knowledge: [\(knowledge)]
         \(indent)  Expected Info Types: [\(infoTypes)]
         """
+            
+            // Add keyword sections if present
+            if !aspect.keywords.isEmpty {
+                result += "\n\(indent)  Keywords:"
+                
+                // Group keywords by category
+                for (category, keywords) in aspect.keywordsByCategory {
+                    result += "\n\(indent)    \(category):"
+                    for keyword in keywords.sorted(by: { $0.weight > $1.weight }) {
+                        result += "\n\(indent)      - \(keyword.term) (\(String(format: "%.2f", keyword.weight)))"
+                        if let context = keyword.context {
+                            result += "\n\(indent)        Context: \(context)"
+                        }
+                    }
+                }
+            }
+            
+            return result
         }
         
         private func formatAspectList(_ aspects: [Aspect], header: String, indent: String = "  ") -> String {
@@ -192,7 +354,7 @@ public struct AspectAnalyzer: Sendable {
     /// Extracts aspects from the query using LLM
     private func extractAspects(from query: String) async throws -> [Aspect] {
         let prompt = """
-        Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, and expected information types.
+        Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, expected information types, and keywords.
         
         Query: \(query)
         
@@ -203,7 +365,15 @@ public struct AspectAnalyzer: Sendable {
                     "description": "Clear description of the aspect",
                     "importance": 0.0-1.0,
                     "requiredKnowledge": ["area1", "area2"],
-                    "expectedInfoTypes": ["type1", "type2"]
+                    "expectedInfoTypes": ["type1", "type2"],
+                    "keywords": [
+                        {
+                            "term": "keyword or phrase",
+                            "weight": 0.0-1.0,
+                            "category": "semantic category",
+                            "context": "optional usage context"
+                        }
+                    ]
                 }
             ]
         }
@@ -212,7 +382,10 @@ public struct AspectAnalyzer: Sendable {
         - Break down complex queries into distinct aspects
         - Assign importance scores based on centrality to the query
         - Include specific knowledge areas needed
-        - Specify types of information expected (e.g., technical, statistical, conceptual)
+        - Specify types of information expected
+        - Identify key terms and phrases for each aspect
+        - Categorize keywords semantically
+        - Include contextual information for ambiguous terms
         """
         
         let data = OKChatRequestData(

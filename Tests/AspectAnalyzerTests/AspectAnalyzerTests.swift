@@ -2,8 +2,8 @@ import Testing
 @testable import AspectAnalyzer
 import Logging
 
-@Test func example() async throws {
-    
+@Test
+func example() async throws {
     let analyzer = AspectAnalyzer(
         logger: Logger(label: "QueryAnalyzer")
     )
@@ -16,23 +16,78 @@ import Logging
     
     let analysis = try await analyzer.analyzeQuery(query)
     
-    // Access analysis results
-    print("Query complexity: \(analysis.complexityScore)")
-    print("\nPriority aspects:")
+    // Print overall analysis
+    print("Query Analysis Results")
+    print("=====================")
+    print("Query complexity: \(String(format: "%.2f", analysis.complexityScore))")
+    
+    // Print prioritized aspects with keywords
+    print("\nPriority Aspects:")
+    print("----------------")
     for aspect in analysis.prioritizedAspects {
-        print("- \(aspect.description) (importance: \(aspect.importance))")
+        print("- \(aspect.description) (importance: \(String(format: "%.2f", aspect.importance)))")
         print("  Knowledge areas: \(aspect.requiredKnowledge.joined(separator: ", "))")
         print("  Info types: \(aspect.expectedInfoTypes.joined(separator: ", "))")
+        
+        // Print keywords by category
+        if !aspect.keywords.isEmpty {
+            print("  Keywords by category:")
+            for (category, keywords) in aspect.keywordsByCategory {
+                print("    \(category):")
+                for keyword in keywords.sorted(by: { $0.weight > $1.weight }) {
+                    print("      - \(keyword.term) (weight: \(String(format: "%.2f", keyword.weight)))")
+                    if let context = keyword.context {
+                        print("        context: \(context)")
+                    }
+                }
+            }
+        }
+        
+        // Print critical keywords
+        let criticalKeywords = aspect.criticalKeywords
+        if !criticalKeywords.isEmpty {
+            print("  Critical Keywords:")
+            for keyword in criticalKeywords {
+                print("    - \(keyword.term) (weight: \(String(format: "%.2f", keyword.weight)))")
+            }
+        }
+        print("")
     }
     
-    print("\nCritical aspects:")
+    // Print critical aspects summary
+    print("\nCritical Aspects:")
+    print("----------------")
     for aspect in analysis.criticalAspects {
         print("- \(aspect.description)")
+        if !aspect.criticalKeywords.isEmpty {
+            print("  Critical terms:")
+            for keyword in aspect.criticalKeywords {
+                print("    - \(keyword.term)")
+            }
+        }
     }
     
-    print("\nPrimary focus areas:")
+    // Print primary focus areas
+    print("\nPrimary Focus Areas:")
+    print("------------------")
     for area in analysis.primaryFocus {
         print("- \(area)")
+    }
+    
+    // Print keyword analysis summary
+    print("\nKeyword Analysis Summary:")
+    print("-----------------------")
+    let allKeywords = analysis.aspects.flatMap(\.keywords)
+    let uniqueCategories = Set(allKeywords.map(\.category))
+    
+    for category in uniqueCategories.sorted() {
+        let categoryKeywords = allKeywords.filter { $0.category == category }
+        let avgWeight = categoryKeywords.map(\.weight).reduce(0, +) / Float(categoryKeywords.count)
+        print("Category: \(category)")
+        print("  Count: \(categoryKeywords.count)")
+        print("  Average weight: \(String(format: "%.2f", avgWeight))")
+        print("  Top terms: \(categoryKeywords.sorted { $0.weight > $1.weight }.prefix(3).map(\.term).joined(separator: ", "))")
+        print("")
     }
 }
 
