@@ -113,6 +113,31 @@ func simpleKeywordExample() async throws {
     }
 }
 
+@Test
+func sampleAnalysisExamples() async throws {
+    // Create analyzer instance with logging
+    let analyzer = AspectAnalyzer(
+        logger: Logger(label: "QueryAnalyzer")
+    )
+    
+    // Sample queries covering different domains
+    let queries = [
+        "What are the key benefits of using microservices architecture?",
+        "How does climate change affect biodiversity in rainforests?",
+        "Explain the basics of neural networks in machine learning."
+    ]
+    
+    // Keyword Analysis Examples
+    print("\nQuick Description Analysis Examples")
+    print("==============================")
+    
+    for query in queries {
+        let analysis = try await analyzer.extractDescription(query)
+        print("\nQuery:", analysis.query)
+        print("Description:", analysis.description)
+    }
+}
+
 @Test("Analyzes quantum computing cryptography query correctly")
 func testQuantumCryptographyQuery() async throws {
     let analyzer = AspectAnalyzer(

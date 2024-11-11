@@ -713,7 +713,7 @@ extension AspectAnalyzer {
             messages: [
                 OKChatRequestData.Message(
                     role: .system,
-                    content: "You are a keyword extraction expert. Extract and prioritize key terms from queries. Respond with JSON arrays only."
+                    content: "You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Respond with JSON arrays only."
                 ),
                 OKChatRequestData.Message(role: .user, content: prompt)
             ]
@@ -758,5 +758,80 @@ extension AspectAnalyzer {
             return String(jsonContent)
         }
         return response
+    }
+}
+
+extension AspectAnalyzer {
+    /// A lightweight analysis result containing only the aspect description.
+    public struct DescriptionAnalysis: Sendable {
+        /// The original query text
+        public let query: String
+        
+        /// A concise description of the primary aspects of the query
+        public let description: String
+    }
+    
+    /// Performs a lightweight analysis of the query to generate a concise description.
+    ///
+    /// This method provides a faster alternative to full aspect analysis when only
+    /// a description of the primary aspects is needed. It uses the same LLM but with
+    /// a simplified prompt focused only on describing the key aspects.
+    ///
+    /// - Parameter query: The query string to analyze
+    /// - Returns: Analysis results containing the aspect description
+    /// - Throws: AnalysisError if the analysis fails
+    public func extractDescription(_ query: String) async throws -> DescriptionAnalysis {
+        let prompt = """
+        Describe the key aspects of the following query in a single concise paragraph.
+        
+        Query: \(query)
+        """
+        
+        let data = OKChatRequestData(
+            model: model,
+            messages: [
+                OKChatRequestData.Message(
+                    role: .system,
+                    content: "You are a query analysis expert. Describe the main aspects of queries concisely in a single paragraph. Always respond in the **same language** as the input query."
+                ),
+                OKChatRequestData.Message(role: .user, content: prompt)
+            ]
+        ) { options in
+            options.temperature = 0 // Deterministic output
+            options.topP = 1
+            options.topK = 1
+        }
+        
+        // Collect response
+        var description = ""
+        for try await chunk in ollamaKit.chat(data: data) {
+            description += chunk.message?.content ?? ""
+        }
+        
+        description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return DescriptionAnalysis(
+            query: query,
+            description: description
+        )
+    }
+    
+    /// Cleans JSON string response to ensure validity
+    private func cleanJsonStringResponse(_ response: String) -> String {
+        // Extract JSON content between quotes, handling escaped quotes
+        if let start = response.firstIndex(of: "\""),
+           let end = response.lastIndex(of: "\"") {
+            let jsonContent = response[start...end]
+            return String(jsonContent)
+        }
+        
+        // Fallback: try to extract any content between braces if quotes not found
+        if let start = response.firstIndex(of: "{"),
+           let end = response.lastIndex(of: "}") {
+            let content = response[start...end]
+            return "\"\(String(content))\""
+        }
+        
+        return "\"\(response)\""
     }
 }
