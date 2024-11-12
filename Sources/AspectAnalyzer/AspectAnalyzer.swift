@@ -706,13 +706,15 @@ extension AspectAnalyzer {
         let data = OKChatRequestData(
             model: model,
             messages: [
-                .system("You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Respond with JSON arrays only."),
+                .system("""
+                You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Additionally, retain proper nouns as they are for the keywords. Respond with JSON arrays only.
+                
+                Extract the most important keywords from the following query, ordered by importance.
+                Return only a JSON array of strings.
+                """),
                 .user("""
-        Extract the most important keywords from the following query, ordered by importance.
-        Return only a JSON array of strings.
-        
-        Query: \(query)
-        """)
+                Query: \(query)
+                """)
             ]
         ) { options in
             options.temperature = 0 // Deterministic output
