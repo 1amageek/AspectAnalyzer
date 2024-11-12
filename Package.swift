@@ -12,6 +12,7 @@ let package = Package(
             targets: ["AspectAnalyzer"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/1amageek/SwiftRetry.git", branch: "main"),
         .package(url: "https://github.com/1amageek/OllamaKit.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-log.git", branch: "main"),
     ],
@@ -19,6 +20,7 @@ let package = Package(
         .target(
             name: "AspectAnalyzer",
             dependencies: [
+                "SwiftRetry",
                 "OllamaKit",
                 .product(name: "Logging", package: "swift-log")
             ]

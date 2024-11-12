@@ -1,5 +1,5 @@
 {
-  "originHash" : "ca854a88c62a11d0b549b586e8beafc17cb141e6c64448e79532cdd8528c7022",
+  "originHash" : "1fe8c0d391e0c98846e36383d6a022d4bdaa2a07bbb5a6d349b1faeaf0924b22",
   "pins" : [
     {
       "identity" : "ollamakit",
@@ -17,6 +17,15 @@
       "state" : {
         "branch" : "main",
         "revision" : "1efe6f812904b34ed76ba28fd1f3e9f3bc94f8ec"
+      }
+    },
+    {
+      "identity" : "swiftretry",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/1amageek/SwiftRetry.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "f5eba455a7134ac3288ef2a5af685f37c3e73767"
       }
     }
   ],

@@ -1,6 +1,7 @@
 import Foundation
 import OllamaKit
 import Logging
+import SwiftRetry
 
 /// An actor that performs aspect analysis on queries.
 ///
@@ -353,7 +354,7 @@ public struct AspectAnalyzer: Sendable {
     
     /// Extracts aspects from the query using LLM
     private func extractAspects(from query: String) async throws -> [Aspect] {
-
+        
         let data = OKChatRequestData(
             model: model,
             messages: [
@@ -369,6 +370,7 @@ public struct AspectAnalyzer: Sendable {
                     Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, expected information types, and keywords.
                     
                     Provide the analysis in the following JSON format:
+                    ```json
                     {
                         "aspects": [
                             {
@@ -387,6 +389,7 @@ public struct AspectAnalyzer: Sendable {
                             }
                         ]
                     }
+                    ```
                     
                     Guidelines:
                     - Break down complex queries into distinct aspects
@@ -411,10 +414,7 @@ public struct AspectAnalyzer: Sendable {
         }
         
         // Collect response
-        var response = ""
-        for try await chunk in ollamaKit.chat(data: data) {
-            response += chunk.message?.content ?? ""
-        }
+        let response = try await getLLMResponse(data: data)
         
         // Clean up response to ensure valid JSON
         let jsonResponse = cleanJsonResponse(response)
@@ -462,13 +462,26 @@ public struct AspectAnalyzer: Sendable {
     
     /// Cleans JSON response string to ensure validity
     private func cleanJsonResponse(_ response: String) -> String {
-        // Extract JSON content between first { and last }
-        if let start = response.firstIndex(of: "{"),
-           let end = response.lastIndex(of: "}") {
-            let jsonContent = response[start...end]
-            return String(jsonContent)
+        response.removingCodeBlocks()
+    }
+}
+
+extension AspectAnalyzer {
+    
+    private func getLLMResponse(data: OKChatRequestData) async throws -> String {
+        try await Retry.attempt(configuration: Retry.Configuration(
+            maxAttempts: 3,
+            enableLogging: true
+        )) {
+            var response = ""
+            for try await chunk in ollamaKit.chat(data: data) {
+                response += chunk.message?.content ?? ""
+            }
+            guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AnalysisError.emptyResponse
+            }
+            return response
         }
-        return response
     }
 }
 
@@ -477,6 +490,8 @@ public struct AspectAnalyzer: Sendable {
 extension AspectAnalyzer {
     /// Errors that can occur during query analysis
     enum AnalysisError: Error {
+        /// Response isEmpty
+        case emptyResponse
         /// Response from LLM was invalid
         case invalidResponse
         /// Failed to decode response
@@ -701,18 +716,16 @@ extension AspectAnalyzer {
     /// - Returns: Analysis results containing prioritized keywords
     /// - Throws: AnalysisError if the analysis fails
     public func extractKeywords(_ query: String) async throws -> KeywordAnalysis {
-        let prompt = """
-        Extract the most important keywords from the following query, ordered by importance.
-        Return only a JSON array of strings.
-        
-        Query: \(query)
-        """
-        
         let data = OKChatRequestData(
             model: model,
             messages: [
                 .system("You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Respond with JSON arrays only."),
-                OKChatRequestData.Message(role: .user, content: prompt)
+                .user("""
+        Extract the most important keywords from the following query, ordered by importance.
+        Return only a JSON array of strings.
+        
+        Query: \(query)
+        """)
             ]
         ) { options in
             options.temperature = 0 // Deterministic output
@@ -721,10 +734,7 @@ extension AspectAnalyzer {
         }
         
         // Collect response
-        var response = ""
-        for try await chunk in ollamaKit.chat(data: data) {
-            response += chunk.message?.content ?? ""
-        }
+        let response = try await getLLMResponse(data: data)
         
         // Clean up response to ensure valid JSON array
         let jsonResponse = cleanJsonArrayResponse(response)
@@ -778,20 +788,15 @@ extension AspectAnalyzer {
     /// - Returns: Analysis results containing the aspect description
     /// - Throws: AnalysisError if the analysis fails
     public func extractDescription(_ query: String) async throws -> DescriptionAnalysis {
-        let prompt = """
-        Describe the key aspects of the following query in a single concise paragraph.
-        
-        Query: \(query)
-        """
-        
         let data = OKChatRequestData(
             model: model,
             messages: [
-                OKChatRequestData.Message(
-                    role: .system,
-                    content: "You are a query analysis expert. Describe the main aspects of queries concisely in a single paragraph. Always respond in the **same language** as the input query."
-                ),
-                OKChatRequestData.Message(role: .user, content: prompt)
+                .system("You are a query analysis expert. Describe the main aspects of queries concisely in a single paragraph. Always respond in the **same language** as the input query."),
+                .user("""
+        Describe the key aspects of the following query in a single concise paragraph.
+        
+        Query: \(query)
+        """)
             ]
         ) { options in
             options.temperature = 0 // Deterministic output
@@ -800,13 +805,8 @@ extension AspectAnalyzer {
         }
         
         // Collect response
-        var description = ""
-        for try await chunk in ollamaKit.chat(data: data) {
-            description += chunk.message?.content ?? ""
-        }
-        
-        description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+        let response = try await getLLMResponse(data: data)
+        let description = response.trimmingCharacters(in: .whitespacesAndNewlines)        
         return DescriptionAnalysis(
             query: query,
             description: description
@@ -830,5 +830,41 @@ extension AspectAnalyzer {
         }
         
         return "\"\(response)\""
+    }
+}
+
+extension String {
+    
+    func extracted() -> String {
+        let (codeBlocks, _) = self.extractingAndRemovingCodeBlocks()
+        if (codeBlocks.isEmpty) { return self.removingCodeBlocks() }
+        return codeBlocks.first?.removingCodeBlocks() ?? self
+    }
+    
+    func extractingAndRemovingCodeBlocks() -> ([String], String) {
+        let pattern = #"(?ms)```(?:.*?\n)?([\s\S]*?)\n?```"#
+        var codeBlocks: [String] = []
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let range = NSRange(self.startIndex..., in: self)
+            let matches = regex.matches(in: self, range: range)
+            for match in matches.reversed() {
+                if let codeRange = Range(match.range(at: 1), in: self) {
+                    let codeBlock = String(self[codeRange])
+                    codeBlocks.insert(codeBlock, at: 0)
+                }
+            }
+        }
+        return (codeBlocks, self)
+    }
+    
+    /// Removes code blocks from the string if present, otherwise returns the string as is.
+    func removingCodeBlocks() -> String {
+        let pattern = #"^```(?:[\s\S]*?)\n([\s\S]*?)\n```$"#
+        if let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) {
+            let range = NSRange(self.startIndex..., in: self)
+            let cleanedText = regex.stringByReplacingMatches(in: self, options: [], range: range, withTemplate: "$1")
+            return cleanedText.isEmpty ? self : cleanedText
+        }
+        return self
     }
 }
