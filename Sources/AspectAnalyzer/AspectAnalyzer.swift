@@ -364,8 +364,10 @@ public struct AspectAnalyzer: Sendable {
                     2. Evaluate importance of each aspect
                     3. Identify required knowledge areas
                     4. Specify expected information types
-                    5. Extract and prioritize key terms from each aspect, maintaining the original language of the query
-                    Provide analysis in structured JSON format only.
+                    5. Extract and prioritize key terms from each aspect, maintaining the *original language* of the query
+                    Provide analysis in structured *JSON format only*.
+                    
+                    **Output must be in structured *JSON format only*, and no additional explanations or information outside the JSON structure are permitted.**
                     
                     Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, expected information types, and keywords.
                     
@@ -404,7 +406,7 @@ public struct AspectAnalyzer: Sendable {
                     
                     Query: \(query)
                     
-                    Output:
+                    Output (JSON Only):
                     """)
             ]
         ) { options in
@@ -413,30 +415,34 @@ public struct AspectAnalyzer: Sendable {
             options.topK = 1
         }
         
-        // Collect response
-        let response = try await getLLMResponse(data: data)
-        
-        // Clean up response to ensure valid JSON
-        let jsonResponse = cleanJsonResponse(response)
-        
-        // Parse response
-        guard let jsonData = jsonResponse.data(using: .utf8) else {
-            throw AnalysisError.invalidResponse
-        }
-        
         struct Response: Codable, Sendable {
             let aspects: [Aspect]
         }
         
-        do {
-            let decoded = try JSONDecoder().decode(Response.self, from: jsonData)
-            return decoded.aspects
-        } catch {
-            logger?.error("Failed to decode aspects", metadata: [
-                "error": .string(error.localizedDescription),
-                "response": .string(response)
-            ])
-            throw AnalysisError.decodingFailed(error)
+        return try await Retry.attempt(configuration: Retry.Configuration(
+            maxAttempts: 3
+        )) {
+            var response = ""
+            for try await chunk in ollamaKit.chat(data: data) {
+                response += chunk.message?.content ?? ""
+            }
+            guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AnalysisError.emptyResponse
+            }
+            let jsonResponse = cleanJsonResponse(response)
+            guard let jsonData = jsonResponse.data(using: .utf8) else {
+                throw AnalysisError.invalidResponse
+            }
+            do {
+                let decoded = try JSONDecoder().decode(Response.self, from: jsonData)
+                return decoded.aspects
+            } catch {
+                logger?.error("Failed to decode aspects", metadata: [
+                    "error": .string(error.localizedDescription),
+                    "response": .string(response)
+                ])
+                throw AnalysisError.decodingFailed(error)
+            }
         }
     }
     
@@ -463,25 +469,6 @@ public struct AspectAnalyzer: Sendable {
     /// Cleans JSON response string to ensure validity
     private func cleanJsonResponse(_ response: String) -> String {
         response.removingCodeBlocks()
-    }
-}
-
-extension AspectAnalyzer {
-    
-    private func getLLMResponse(data: OKChatRequestData) async throws -> String {
-        try await Retry.attempt(configuration: Retry.Configuration(
-            maxAttempts: 3,
-            enableLogging: true
-        )) {
-            var response = ""
-            for try await chunk in ollamaKit.chat(data: data) {
-                response += chunk.message?.content ?? ""
-            }
-            guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw AnalysisError.emptyResponse
-            }
-            return response
-        }
     }
 }
 
@@ -733,26 +720,30 @@ extension AspectAnalyzer {
             options.topK = 1
         }
         
-        // Collect response
-        let response = try await getLLMResponse(data: data)
-        
-        // Clean up response to ensure valid JSON array
-        let jsonResponse = cleanJsonArrayResponse(response)
-        
-        // Parse response
-        guard let jsonData = jsonResponse.data(using: .utf8) else {
-            throw AnalysisError.invalidResponse
-        }
-        
-        do {
-            let keywords = try JSONDecoder().decode([String].self, from: jsonData)
-            return KeywordAnalysis(query: query, keywords: keywords)
-        } catch {
-            logger?.error("Failed to decode keywords", metadata: [
-                "error": .string(error.localizedDescription),
-                "response": .string(response)
-            ])
-            throw AnalysisError.decodingFailed(error)
+        return try await Retry.attempt(configuration: Retry.Configuration(
+            maxAttempts: 3
+        )) {
+            var response = ""
+            for try await chunk in ollamaKit.chat(data: data) {
+                response += chunk.message?.content ?? ""
+            }
+            guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AnalysisError.emptyResponse
+            }
+            let jsonResponse = cleanJsonArrayResponse(response)
+            guard let jsonData = jsonResponse.data(using: .utf8) else {
+                throw AnalysisError.invalidResponse
+            }
+            do {
+                let keywords = try JSONDecoder().decode([String].self, from: jsonData)
+                return KeywordAnalysis(query: query, keywords: keywords)
+            } catch {
+                logger?.error("Failed to decode keywords", metadata: [
+                    "error": .string(error.localizedDescription),
+                    "response": .string(response)
+                ])
+                throw AnalysisError.decodingFailed(error)
+            }
         }
     }
     
@@ -804,9 +795,19 @@ extension AspectAnalyzer {
             options.topK = 1
         }
         
-        // Collect response
-        let response = try await getLLMResponse(data: data)
-        let description = response.trimmingCharacters(in: .whitespacesAndNewlines)        
+        let description = try await Retry.attempt(configuration: Retry.Configuration(
+            maxAttempts: 3
+        )) {
+            var response = ""
+            for try await chunk in ollamaKit.chat(data: data) {
+                response += chunk.message?.content ?? ""
+            }
+            guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AnalysisError.emptyResponse
+            }
+            return response
+        }
+  
         return DescriptionAnalysis(
             query: query,
             description: description
