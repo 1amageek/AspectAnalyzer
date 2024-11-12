@@ -468,7 +468,7 @@ public struct AspectAnalyzer: Sendable {
     
     /// Cleans JSON response string to ensure validity
     private func cleanJsonResponse(_ response: String) -> String {
-        response.removingCodeBlocks()
+        response.extractedCodeBlock()
     }
 }
 
@@ -838,7 +838,7 @@ extension AspectAnalyzer {
 
 extension String {
     
-    func extracted() -> String {
+    public func extractedCodeBlock() -> String {
         let (codeBlocks, _) = self.extractingAndRemovingCodeBlocks()
         if (codeBlocks.isEmpty) { return self.removingCodeBlocks() }
         return codeBlocks.first?.removingCodeBlocks() ?? self
