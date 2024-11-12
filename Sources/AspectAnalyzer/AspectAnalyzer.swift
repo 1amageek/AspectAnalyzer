@@ -353,56 +353,56 @@ public struct AspectAnalyzer: Sendable {
     
     /// Extracts aspects from the query using LLM
     private func extractAspects(from query: String) async throws -> [Aspect] {
-        let prompt = """
-        Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, expected information types, and keywords.
-        
-        Query: \(query)
-        
-        Provide the analysis in the following JSON format:
-        {
-            "aspects": [
-                {
-                    "description": "Clear description of the aspect",
-                    "importance": 0.0-1.0,
-                    "requiredKnowledge": ["area1", "area2"],
-                    "expectedInfoTypes": ["type1", "type2"],
-                    "keywords": [
-                        {
-                            "term": "keyword or phrase",
-                            "weight": 0.0-1.0,
-                            "category": "semantic category",
-                            "context": "optional usage context"
-                        }
-                    ]
-                }
-            ]
-        }
-        
-        Guidelines:
-        - Break down complex queries into distinct aspects
-        - Assign importance scores based on centrality to the query
-        - Include specific knowledge areas needed
-        - Specify types of information expected
-        - Identify key terms and phrases for each aspect
-        - Categorize keywords semantically
-        - Include contextual information for ambiguous terms
-        """
-        
+
         let data = OKChatRequestData(
             model: model,
             messages: [
-                OKChatRequestData.Message(
-                    role: .system,
-                    content: """
+                .system("""
                     You are a query analysis expert. Your task is to:
                     1. Break down queries into key aspects
                     2. Evaluate importance of each aspect
                     3. Identify required knowledge areas
                     4. Specify expected information types
+                    5. Extract and prioritize key terms from each aspect, maintaining the original language of the query
                     Provide analysis in structured JSON format only.
-                    """
-                ),
-                OKChatRequestData.Message(role: .user, content: prompt)
+                    
+                    Analyze the following query and identify its key aspects. For each aspect, determine its importance, required knowledge areas, expected information types, and keywords.
+                    
+                    Provide the analysis in the following JSON format:
+                    {
+                        "aspects": [
+                            {
+                                "description": "Clear description of the aspect",
+                                "importance": 0.0-1.0,
+                                "requiredKnowledge": ["area1", "area2"],
+                                "expectedInfoTypes": ["type1", "type2"],
+                                "keywords": [
+                                    {
+                                        "term": "keyword or phrase", // keyword must be in the same language as the input query
+                                        "weight": 0.0-1.0,
+                                        "category": "semantic category",
+                                        "context": "optional usage context"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    
+                    Guidelines:
+                    - Break down complex queries into distinct aspects
+                    - Assign importance scores based on centrality to the query
+                    - Include specific knowledge areas needed
+                    - Specify types of information expected
+                    - Identify key terms and phrases for each aspect
+                    - Categorize keywords semantically
+                    - Include contextual information for ambiguous terms
+                    """),
+                .user("""
+                    
+                    Query: \(query)
+                    
+                    Output:
+                    """)
             ]
         ) { options in
             options.temperature = 0 // Deterministic output
@@ -711,10 +711,7 @@ extension AspectAnalyzer {
         let data = OKChatRequestData(
             model: model,
             messages: [
-                OKChatRequestData.Message(
-                    role: .system,
-                    content: "You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Respond with JSON arrays only."
-                ),
+                .system("You are a keyword extraction expert. Extract and prioritize key terms from queries. Maintain the original language of the query in the extracted keywords. Respond with JSON arrays only."),
                 OKChatRequestData.Message(role: .user, content: prompt)
             ]
         ) { options in
